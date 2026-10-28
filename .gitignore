@@ -1,0 +1,6 @@
+**/ignore/
+**/out/
+
+*.log
+*.psd1
+*.key
