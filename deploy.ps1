@@ -19,22 +19,22 @@
 # IN THE SOFTWARE.
 
 param(
-    [string]$FolderPath = "",
+    [string]$FolderPath = "./ps-youtrack/",
     [string]$ModuleName,
-    [version]$Version,
-    [string]$LocalRepoName = "",
+    [version]$Version = [version]"0.0.2",
+    [string]$LocalRepoName = "BCPS",
     [string]$Author,
     [string]$CompanyName = "Unknown",
-    [version]$MinPsVersion,
-    [string[]]$FunctionsToExport = "*",
+    [version]$MinPsVersion = [version]"7.0.0",
+    [string[]]$FunctionsToExport = @("New-YtClient", "Get-YtIssues"),
     [string[]]$CmdletsToExport = "*",
     [string[]]$VariablesToExport = "*",
     [string[]]$AliasesToExport = "*",
-    [string]$LicenseUri,
-    [string]$ProjectUri,
-    [string]$Prerelease,
+    [string]$LicenseUri = "https://opensource.org/license/MIT",
+    [string]$ProjectUri = "https://github.com/BryanCuneo/ps-youtrack",
+    [string]$Prerelease = "alpha",
 
-    [string]$LogPath = "./deploy.log",
+    [string]$LogOutputFile = "./ignore/deploy.log",
 
     [switch]$Install,
     [switch]$Force
@@ -43,7 +43,7 @@ param(
 Import-Module ps-jsonlogger
 
 $logger_params = @{
-    Path        = $LogPath
+    Path        = $LogOutputFile
     ProgramName = "PS Module Deploy Script"
     WriteToHost = "Simple"
     Overwrite   = $true
@@ -63,8 +63,7 @@ try {
         throw "Test-Path: '$FolderPath' is not a directory"
     }
     Write-Log -Inf "`$FolderPath '$FolderPath' validated"
-}
-catch {
+} catch {
     Write-Log -Ftl "Input validation failed `$FolderPath '$FolderPath' is not a directory"
 }
 
@@ -90,8 +89,8 @@ if ([string]::IsNullOrWhiteSpace($ModuleName)) {
     Write-Log -Wrn "`$ModuleName not provided, using '$ModuleName'"
 }
 
-$copyright = "(c) $(Get-Date -f "yyyy") $Author. <TERMS OR LICENSE BLURB>"
-$description = "$ModuleName <DESCRIPTION>"
+$copyright = "(c) $(Get-Date -f "yyyy") $Author. Made available under the terms of the MIT License."
+$description = "$ModuleName is a PowerShell 7 wrapper around the YouTrack REST API."
 $psd_path = Join-Path -Path $FolderPath -ChildPath "$ModuleName.psd1"
 
 $manifest_params = @{
@@ -111,7 +110,7 @@ if ($MinPsVersion) {
     $manifest_params.PowerShellVersion = $MinPsVersion
 }
 if ($LicenseUri) {
-    $manifest_params.LicenseUri = $LicenseUrirams
+    $manifest_params.LicenseUri = $LicenseUri
 }
 if ($ProjectUri) {
     $manifest_params.ProjectUri = $ProjectUri
@@ -120,22 +119,24 @@ if ($Prerelease) {
     $manifest_params.Prerelease = $Prerelease
 }
 
-if (Test-Path $psd_path) {
-    Write-Log -Inf "Updating module manifest"
-    Update-ModuleManifest @manifest_params -ErrorAction Stop
+try {
+    if (Test-Path $psd_path) {
+        Write-Log -Inf "Updating module manifest"
+        Update-ModuleManifest @manifest_params -ErrorAction Stop
+    } else {
+        Write-Log -Inf "Generating module manifest"
+        New-ModuleManifest @manifest_params -ErrorAction Stop
+    }
+    Write-Log -Scs "Module manifest built. Review at '$psd_path'"
+} catch {
+    Write-Log -Ftl "Error building manifest: '$_'" -Context $manifest_params
 }
-else {
-    Write-Log -Inf "Generating module manifest"
-    New-ModuleManifest @manifest_params -ErrorAction Stop
-}
-Write-Log -Scs "Module manifest built. Review at '$psd_path'"
 
 # If this is a prerelease, combine that with the $Version variable for use in
 # a few times later in the script
 if ($Prerelease) {
     $version_str = "$Version-$Prerelease"
-}
-else {
+} else {
     $version_str = $Version.ToString()
 }
 
@@ -153,8 +154,7 @@ if ($Force) {
 try {
     Write-Log -Inf "Publishing module"
     Publish-Module -Path $FolderPath -Repository $LocalRepoName
-}
-catch {
+} catch {
     Write-Log -Ftl "Error publishing module: '$_'"
 }
 
@@ -181,8 +181,7 @@ $parts = foreach ($entry in $module_params.GetEnumerator()) {
 
     if ($value -is [bool]) {
         $formattedValue = "`$$($value.ToString().ToLowerInvariant())"
-    }
-    else {
+    } else {
         $text = [string]$value
         $formattedValue = '"' + $text.Replace('"', '`"') + '"'
     }
@@ -202,11 +201,9 @@ if ($Force -and (Get-Module -ListAvailable -Name $ModuleName)) {
 
         Update-Module @module_params
         Write-Log -Scs "Module published and updated successfully"
-    }
-    catch {
+    } catch {
         Write-Log -Ftl "Error updating module: '$_'"
-    }
-    finally {
+    } finally {
         Close-Log
         exit
     }
@@ -225,10 +222,8 @@ try {
 
     Install-Module @module_params
     Write-Log -Scs "Module published and installed successfully"
-}
-catch {
+} catch {
     Write-Log -Ftl "Error installing module: '$_'"
-}
-finally {
+} finally {
     Close-Log "All done"
 }
